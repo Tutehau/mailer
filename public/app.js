@@ -631,55 +631,5 @@ form.addEventListener('submit', async (event) => {
 
 renderPreview();
 
-/* ---------------------------------------------------------------- */
-/* PWA — service worker + bannière d'installation                     */
-/* ---------------------------------------------------------------- */
-
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/service-worker.js').catch(() => {});
-  });
-}
-
-let deferredInstallPrompt = null;
-const installBanner = document.getElementById('install-banner');
-const INSTALL_DISMISS_KEY = 'mailer.installDismissedAt';
-
-function dismissedRecently() {
-  const raw = localStorage.getItem(INSTALL_DISMISS_KEY);
-  if (!raw) return false;
-  return Date.now() - Number(raw) < 7 * 24 * 60 * 60 * 1000;
-}
-
-function maybeShowInstallBanner() {
-  if (!deferredInstallPrompt || dismissedRecently()) return;
-  // Ne jamais superposer la bannière d'installation à celle des cookies —
-  // on attend que l'utilisateur ait fermé cette dernière.
-  if (window.mailerCookieConsentResolved && !window.mailerCookieConsentResolved()) return;
-  installBanner.hidden = false;
-}
-
-window.addEventListener('beforeinstallprompt', (event) => {
-  event.preventDefault();
-  deferredInstallPrompt = event;
-  maybeShowInstallBanner();
-});
-
-window.addEventListener('mailer:cookie-consent-resolved', maybeShowInstallBanner);
-
-document.getElementById('install-dismiss').addEventListener('click', () => {
-  installBanner.hidden = true;
-  localStorage.setItem(INSTALL_DISMISS_KEY, String(Date.now()));
-});
-
-document.getElementById('install-accept').addEventListener('click', async () => {
-  installBanner.hidden = true;
-  if (!deferredInstallPrompt) return;
-  deferredInstallPrompt.prompt();
-  await deferredInstallPrompt.userChoice;
-  deferredInstallPrompt = null;
-});
-
-window.addEventListener('appinstalled', () => {
-  installBanner.hidden = true;
-});
+// PWA install prompt + service worker registration : voir install-prompt.js
+// (composant partagé, chargé aussi sur login.html et register.html).

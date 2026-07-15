@@ -512,36 +512,3 @@ textarea:focus {
   flex-shrink: 0;
 }
 
-/* ---------- Install banner ---------- */
-
-.install-banner {
-  position: fixed;
-  left: 16px;
-  right: 16px;
-  bottom: 16px;
-  z-index: 60;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  box-shadow: var(--shadow);
-  padding: 14px 16px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-  max-width: 460px;
-  margin: 0 auto;
-}
-
-@media (max-width: 780px) {
-  .install-banner { bottom: calc(var(--bottomnav-h) + 24px + env(safe-area-inset-bottom, 0px)); }
-}
-
-.install-banner span {
-  font-size: 13.5px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.install-banner-actions { display: flex; gap: 8px; }
