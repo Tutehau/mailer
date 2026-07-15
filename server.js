@@ -270,7 +270,14 @@ function listTemplates() {
 }
 
 function templatePath(id) {
-  return path.join(TEMPLATES_DIR, `${id}.json`);
+  if (typeof id !== 'string' || !/^[a-z0-9-]{1,64}$/.test(id)) {
+    throw Object.assign(new Error('Identifiant de modèle invalide.'), { status: 400 });
+  }
+  const resolved = path.resolve(TEMPLATES_DIR, `${id}.json`);
+  if (path.dirname(resolved) !== path.resolve(TEMPLATES_DIR)) {
+    throw Object.assign(new Error('Identifiant de modèle invalide.'), { status: 400 });
+  }
+  return resolved;
 }
 
 function readHistory() {
