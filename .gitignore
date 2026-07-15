@@ -1,0 +1,10 @@
+.env
+node_modules/
+uploads/
+data/
+
+# Contenu personnel (arrêt de travail, photo, emails privés) — ne doit
+# jamais être poussé sur un dépôt, même privé.
+assets/
+cerience.html
+index.html
