@@ -27,12 +27,16 @@
       <form id="setup-form" class="login-panel">
         <div>
           <p class="login-title">Créer le compte administrateur</p>
-          <p class="login-sub">Première utilisation — choisis un identifiant et un mot de passe pour protéger l'application.</p>
+          <p class="login-sub">Première utilisation — choisis un identifiant et un mot de passe pour protéger l'application. Un email d'activation te sera envoyé.</p>
         </div>
 
         <label class="field">
           <span>Identifiant</span>
           <input type="text" id="setup-username" autocomplete="username" required autofocus>
+        </label>
+        <label class="field">
+          <span>Email <em>— pour l'activation du compte</em></span>
+          <input type="email" id="setup-email" autocomplete="email" required>
         </label>
         <label class="field">
           <span>Mot de passe <em>— 8 caractères minimum</em></span>
