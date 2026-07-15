@@ -14,8 +14,12 @@ const CACHE_VERSION = 'mailer-cache-v1';
 const CORE_ASSETS = [
   'login.html',
   'login.js',
+  'register.html',
+  'register.js',
+  'auth.css',
   'style.css',
   'app.js',
+  'cookie-consent.js',
   'manifest.json',
   'icons/icon-192.png',
   'icons/icon-512.png',

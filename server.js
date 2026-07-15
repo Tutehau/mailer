@@ -128,9 +128,8 @@ function hasAccount() {
 }
 
 function requireAuthPage(req, res, next) {
-  if (!hasAccount() || !req.session.authenticated) {
-    return res.redirect('/login.html');
-  }
+  if (!hasAccount()) return res.redirect('/register.html');
+  if (!req.session.authenticated) return res.redirect('/login.html');
   next();
 }
 

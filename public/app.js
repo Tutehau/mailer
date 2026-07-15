@@ -651,11 +651,21 @@ function dismissedRecently() {
   return Date.now() - Number(raw) < 7 * 24 * 60 * 60 * 1000;
 }
 
+function maybeShowInstallBanner() {
+  if (!deferredInstallPrompt || dismissedRecently()) return;
+  // Ne jamais superposer la bannière d'installation à celle des cookies —
+  // on attend que l'utilisateur ait fermé cette dernière.
+  if (window.mailerCookieConsentResolved && !window.mailerCookieConsentResolved()) return;
+  installBanner.hidden = false;
+}
+
 window.addEventListener('beforeinstallprompt', (event) => {
   event.preventDefault();
   deferredInstallPrompt = event;
-  if (!dismissedRecently()) installBanner.hidden = false;
+  maybeShowInstallBanner();
 });
+
+window.addEventListener('mailer:cookie-consent-resolved', maybeShowInstallBanner);
 
 document.getElementById('install-dismiss').addEventListener('click', () => {
   installBanner.hidden = true;
