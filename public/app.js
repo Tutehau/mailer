@@ -2,6 +2,26 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const DRAFT_KEY = 'mailer.draft.v1';
 
 /* ---------------------------------------------------------------- */
+/* Session                                                            */
+/* ---------------------------------------------------------------- */
+
+fetch('/api/me')
+  .then((res) => res.json())
+  .then((data) => {
+    if (!data.authenticated) {
+      window.location.href = '/login.html';
+      return;
+    }
+    document.getElementById('account-email').textContent = data.email;
+  })
+  .catch(() => {});
+
+document.getElementById('logout-btn').addEventListener('click', async () => {
+  await fetch('/api/logout', { method: 'POST' });
+  window.location.href = '/login.html';
+});
+
+/* ---------------------------------------------------------------- */
 /* Tabs                                                              */
 /* ---------------------------------------------------------------- */
 

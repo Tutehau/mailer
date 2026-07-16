@@ -6,10 +6,14 @@
  * dynamiques (identifiants, historique, modèles) qui doivent toujours
  * venir du réseau.
  */
-const CACHE_VERSION = 'mailer-cache-v2';
+const CACHE_VERSION = 'mailer-cache-v3';
 
 const CORE_ASSETS = [
-  'index.html',
+  'login.html',
+  'register.html',
+  'auth.css',
+  'login.js',
+  'register.js',
   'style.css',
   'app.js',
   'cookie-consent.js',
