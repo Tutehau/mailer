@@ -2,25 +2,6 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const DRAFT_KEY = 'mailer.draft.v1';
 
 /* ---------------------------------------------------------------- */
-/* Redirect to login if the session expired mid-use                  */
-/* ---------------------------------------------------------------- */
-
-const nativeFetch = window.fetch.bind(window);
-window.fetch = async (input, init) => {
-  const res = await nativeFetch(input, init);
-  const url = typeof input === 'string' ? input : input.url;
-  if (res.status === 401 && url.startsWith('/api/') && !url.startsWith('/api/auth/')) {
-    window.location.href = '/login.html';
-  }
-  return res;
-};
-
-document.getElementById('logout').addEventListener('click', async () => {
-  await fetch('/api/auth/logout', { method: 'POST' });
-  window.location.href = '/login.html';
-});
-
-/* ---------------------------------------------------------------- */
 /* Tabs                                                              */
 /* ---------------------------------------------------------------- */
 
@@ -632,4 +613,3 @@ form.addEventListener('submit', async (event) => {
 renderPreview();
 
 // PWA install prompt + service worker registration : voir install-prompt.js
-// (composant partagé, chargé aussi sur login.html et register.html).

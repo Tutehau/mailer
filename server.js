@@ -9,9 +9,6 @@ const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 const multer = require('multer');
 const nodemailer = require('nodemailer');
-const session = require('express-session');
-const FileStore = require('session-file-store')(session);
-const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 
 const isProd = process.env.NODE_ENV === 'production';
@@ -19,16 +16,12 @@ const PORT = Number(process.env.PORT) || 3000;
 const ENV_PATH = path.join(__dirname, '.env');
 const DATA_DIR = path.join(__dirname, 'data');
 const TEMPLATES_DIR = path.join(DATA_DIR, 'templates');
-const SESSIONS_DIR = path.join(DATA_DIR, 'sessions');
 const HISTORY_PATH = path.join(DATA_DIR, 'history.json');
 const CONTACTS_PATH = path.join(DATA_DIR, 'contacts.json');
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const CONTACT_TYPES = ['particulier', 'professionnel'];
-const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
-const ACTIVATION_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
 
 fs.mkdirSync(TEMPLATES_DIR, { recursive: true });
-fs.mkdirSync(SESSIONS_DIR, { recursive: true });
 if (!fs.existsSync(HISTORY_PATH)) fs.writeFileSync(HISTORY_PATH, '[]');
 if (!fs.existsSync(CONTACTS_PATH)) fs.writeFileSync(CONTACTS_PATH, '[]');
 
@@ -40,20 +33,6 @@ function persistEnvValue(key, value) {
   lines.push(`${key}=${value}`);
   fs.writeFileSync(ENV_PATH, lines.filter(Boolean).join('\n') + '\n', { mode: 0o600 });
   process.env[key] = value;
-}
-
-function deleteEnvValue(key) {
-  if (fs.existsSync(ENV_PATH)) {
-    const lines = fs.readFileSync(ENV_PATH, 'utf8').split('\n').filter((line) => !line.startsWith(`${key}=`));
-    fs.writeFileSync(ENV_PATH, lines.filter(Boolean).join('\n') + '\n', { mode: 0o600 });
-  }
-  delete process.env[key];
-}
-
-// A session secret is required to sign session cookies; generate one on first
-// run rather than forcing the user to invent and paste a random string.
-if (!process.env.SESSION_SECRET) {
-  persistEnvValue('SESSION_SECRET', crypto.randomBytes(32).toString('hex'));
 }
 
 function seedDefaultTemplate() {
@@ -111,169 +90,9 @@ app.use((req, res, next) => {
 
 app.use(express.json({ limit: '256kb' }));
 
-app.use(session({
-  store: new FileStore({ path: SESSIONS_DIR, logFn: () => {} }),
-  secret: process.env.SESSION_SECRET,
-  name: 'mailer.sid',
-  resave: false,
-  saveUninitialized: false,
-  rolling: true,
-  proxy: true,
-  cookie: {
-    httpOnly: true,
-    sameSite: 'lax',
-    // 'auto' asks express-session to require HTTPS only when the request
-    // (including via X-Forwarded-Proto, since trust proxy is set) is
-    // actually HTTPS — a fixed `true` would silently drop the cookie and
-    // loop the login forever whenever the app is reached over plain HTTP.
-    secure: 'auto',
-    maxAge: THIRTY_DAYS_MS,
-  },
-}));
-
-function hasAccount() {
-  return Boolean(process.env.APP_USERNAME && process.env.APP_PASSWORD_HASH);
-}
-
-function isActivated() {
-  return process.env.APP_ACTIVATED === 'true';
-}
-
-function issueActivationToken() {
-  const token = crypto.randomBytes(32).toString('hex');
-  const hash = crypto.createHash('sha256').update(token).digest('hex');
-  const expiresAt = Date.now() + ACTIVATION_TOKEN_TTL_MS;
-  persistEnvValue('APP_ACTIVATION_TOKEN_HASH', hash);
-  persistEnvValue('APP_ACTIVATION_TOKEN_EXPIRES', String(expiresAt));
-  return token;
-}
-
-function consumeActivationToken(token) {
-  const storedHash = process.env.APP_ACTIVATION_TOKEN_HASH;
-  const expiresAt = Number(process.env.APP_ACTIVATION_TOKEN_EXPIRES || 0);
-  if (!storedHash || !token || Date.now() > expiresAt) return false;
-
-  const providedHash = crypto.createHash('sha256').update(token).digest('hex');
-  const a = Buffer.from(providedHash);
-  const b = Buffer.from(storedHash);
-  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return false;
-
-  persistEnvValue('APP_ACTIVATED', 'true');
-  deleteEnvValue('APP_ACTIVATION_TOKEN_HASH');
-  deleteEnvValue('APP_ACTIVATION_TOKEN_EXPIRES');
-  return true;
-}
-
-function getNotificationTransporter() {
-  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS } = process.env;
-  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
-    throw new Error("Configuration SMTP manquante (SMTP_HOST/SMTP_USER/SMTP_PASS) pour l'envoi des emails de compte.");
-  }
-  return nodemailer.createTransport({
-    host: SMTP_HOST,
-    port: Number(SMTP_PORT) || 587,
-    secure: process.env.SMTP_SECURE === 'true',
-    auth: { user: SMTP_USER, pass: SMTP_PASS },
-  });
-}
-
-function activationEmailHtml({ username, link, expiresAt }) {
-  const expiryLabel = new Date(expiresAt).toLocaleString('fr-FR', {
-    day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit',
-  });
-  return `<!doctype html>
-<html lang="fr">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Activation du compte — Mailer</title>
-</head>
-<body style="margin:0;padding:0;background:#eef1f4;-webkit-text-size-adjust:100%;font-family:Arial,Helvetica,sans-serif;color:#20272e;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#eef1f4;border-collapse:collapse;">
-    <tr>
-      <td align="center" style="padding:36px 16px;">
-        <table role="presentation" width="480" cellpadding="0" cellspacing="0" border="0" style="width:480px;max-width:480px;background:#ffffff;border:1px solid #dde3e9;border-collapse:separate;border-spacing:0;border-radius:16px;overflow:hidden;box-shadow:0 1px 2px rgba(16,24,32,0.05);">
-          <tr>
-            <td style="height:5px;line-height:5px;font-size:0;background:#12232e;">&nbsp;</td>
-          </tr>
-          <tr>
-            <td style="padding:36px 36px 8px 36px;">
-              <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
-                <tr>
-                  <td style="width:44px;height:44px;background:#12232e;border-radius:12px;">
-                    <table role="presentation" width="100%" height="44" cellpadding="0" cellspacing="0" border="0"><tr><td align="center" valign="middle">
-                      <span style="color:#4fd0c4;font-size:20px;line-height:1;">&#9993;</span>
-                    </td></tr></table>
-                  </td>
-                  <td style="padding-left:12px;">
-                    <p style="margin:0;font-size:14px;line-height:1.3;font-weight:800;color:#12232e;">Mailer</p>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-          <tr>
-            <td style="padding:22px 36px 0 36px;">
-              <h1 style="margin:0 0 14px 0;font-size:21px;line-height:1.3;font-weight:800;color:#12232e;">
-                Bienvenue, ${username} 👋
-              </h1>
-              <p style="margin:0 0 20px 0;font-size:15px;line-height:1.7;color:#2b3947;">
-                Ton compte administrateur vient d'être créé. Il ne reste qu'une étape avant de pouvoir t'y connecter : confirmer que cette adresse email t'appartient bien.
-              </p>
-            </td>
-          </tr>
-          <tr>
-            <td style="padding:0 36px 28px 36px;">
-              <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
-                <tr>
-                  <td style="border-radius:999px;background:#1c7c74;">
-                    <a href="${link}" style="display:inline-block;padding:14px 28px;font-size:15px;line-height:1;font-weight:800;color:#ffffff;text-decoration:none;">
-                      Activer mon compte
-                    </a>
-                  </td>
-                </tr>
-              </table>
-              <p style="margin:18px 0 0 0;font-size:12.5px;line-height:1.6;color:#7a8492;">
-                Ce lien est valable jusqu'au ${expiryLabel}. Si le bouton ne fonctionne pas, copie-colle cette adresse dans ton navigateur :<br>
-                <a href="${link}" style="color:#1c7c74;word-break:break-all;">${link}</a>
-              </p>
-            </td>
-          </tr>
-          <tr>
-            <td style="padding:18px 36px 30px 36px;border-top:1px solid #e5e9ed;">
-              <p style="margin:0;font-size:12.5px;line-height:1.6;color:#7a8492;">
-                Si tu n'es pas à l'origine de cette création de compte, ignore simplement cet email.
-              </p>
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>`;
-}
-
-function requireAuthPage(req, res, next) {
-  if (!hasAccount()) return res.redirect('/register.html');
-  if (!req.session.authenticated) return res.redirect('/login.html');
-  next();
-}
-
-function requireAuthApi(req, res, next) {
-  if (!hasAccount() || !req.session.authenticated) {
-    return res.status(401).json({ error: 'Non authentifié.' });
-  }
-  next();
-}
-
 const publicDir = path.join(__dirname, 'public');
 
-app.get(['/', '/index.html'], requireAuthPage, (req, res) => {
-  res.sendFile(path.join(publicDir, 'index.html'));
-});
-
-app.use(express.static(publicDir, { maxAge: isProd ? '1h' : 0, index: false }));
+app.use(express.static(publicDir, { maxAge: isProd ? '1h' : 0 }));
 app.use('/assets', express.static(path.join(__dirname, 'assets'), { maxAge: isProd ? '1d' : 0 }));
 
 const apiLimiter = rateLimit({
@@ -284,120 +103,6 @@ const apiLimiter = rateLimit({
   message: { error: 'Trop de requêtes, réessaie dans quelques minutes.' },
 });
 app.use('/api/', apiLimiter);
-
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Trop de tentatives, réessaie dans quelques minutes.' },
-});
-
-app.get('/api/auth/status', (req, res) => {
-  res.json({ hasAccount: hasAccount(), authenticated: Boolean(hasAccount() && req.session.authenticated) });
-});
-
-app.post('/api/auth/setup', authLimiter, asyncRoute(async (req, res) => {
-  if (hasAccount()) return res.status(409).json({ error: 'Un compte existe déjà.' });
-
-  const { username, email, password } = req.body || {};
-  const trimmedUser = (username || '').trim();
-  const trimmedEmail = (email || '').trim();
-  if (!trimmedUser || !password || password.length < 8) {
-    return res.status(400).json({ error: "Identifiant requis et mot de passe d'au moins 8 caractères." });
-  }
-  if (!trimmedEmail || !EMAIL_RE.test(trimmedEmail)) {
-    return res.status(400).json({ error: "Une adresse email valide est requise pour l'activation du compte." });
-  }
-
-  const hash = await bcrypt.hash(password, 12);
-  persistEnvValue('APP_USERNAME', trimmedUser);
-  persistEnvValue('APP_EMAIL', trimmedEmail);
-  persistEnvValue('APP_PASSWORD_HASH', hash);
-  persistEnvValue('APP_ACTIVATED', 'false');
-
-  const token = issueActivationToken();
-  const link = `${req.protocol}://${req.get('host')}/api/auth/activate?token=${token}`;
-  let emailSent = true;
-  try {
-    const transporter = getNotificationTransporter();
-    await transporter.sendMail({
-      from: `"Mailer" <${process.env.SMTP_USER}>`,
-      to: trimmedEmail,
-      subject: 'Active ton compte Mailer',
-      html: activationEmailHtml({ username: trimmedUser, link, expiresAt: Date.now() + ACTIVATION_TOKEN_TTL_MS }),
-    });
-  } catch (err) {
-    console.error("Échec de l'envoi de l'email d'activation :", err.message);
-    emailSent = false;
-  }
-
-  res.json({ ok: true, emailSent });
-}));
-
-app.get('/api/auth/activate', (req, res) => {
-  const success = consumeActivationToken(req.query.token);
-  res.redirect(`/login.html?activated=${success ? '1' : '0'}`);
-});
-
-app.post('/api/auth/resend-activation', authLimiter, asyncRoute(async (req, res) => {
-  if (!hasAccount()) return res.status(409).json({ error: 'Aucun compte configuré.' });
-  if (isActivated()) return res.status(409).json({ error: 'Ce compte est déjà activé.' });
-
-  const { username, password } = req.body || {};
-  const valid =
-    (username || '').trim() === process.env.APP_USERNAME &&
-    (await bcrypt.compare(password || '', process.env.APP_PASSWORD_HASH));
-  if (!valid) return res.status(401).json({ error: 'Identifiant ou mot de passe incorrect.' });
-
-  const token = issueActivationToken();
-  const link = `${req.protocol}://${req.get('host')}/api/auth/activate?token=${token}`;
-  try {
-    const transporter = getNotificationTransporter();
-    await transporter.sendMail({
-      from: `"Mailer" <${process.env.SMTP_USER}>`,
-      to: process.env.APP_EMAIL,
-      subject: 'Active ton compte Mailer',
-      html: activationEmailHtml({ username: process.env.APP_USERNAME, link, expiresAt: Date.now() + ACTIVATION_TOKEN_TTL_MS }),
-    });
-  } catch (err) {
-    return res.status(502).json({ error: "Échec de l'envoi : " + err.message });
-  }
-
-  res.json({ ok: true });
-}));
-
-app.post('/api/auth/login', authLimiter, asyncRoute(async (req, res) => {
-  if (!hasAccount()) return res.status(409).json({ error: "Aucun compte configuré, crée-en un d'abord." });
-
-  const { username, password } = req.body || {};
-  const trimmedUser = (username || '').trim();
-  const valid =
-    trimmedUser === process.env.APP_USERNAME &&
-    (await bcrypt.compare(password || '', process.env.APP_PASSWORD_HASH));
-
-  if (!valid) return res.status(401).json({ error: 'Identifiant ou mot de passe incorrect.' });
-
-  if (!isActivated()) {
-    return res.status(403).json({ error: 'Compte non activé. Vérifie tes emails.', code: 'NOT_ACTIVATED' });
-  }
-
-  req.session.authenticated = true;
-  req.session.username = trimmedUser;
-  res.json({ ok: true });
-}));
-
-app.post('/api/auth/logout', (req, res) => {
-  req.session.destroy(() => {
-    res.clearCookie('mailer.sid');
-    res.json({ ok: true });
-  });
-});
-
-app.use('/api', (req, res, next) => {
-  if (req.path.startsWith('/auth')) return next();
-  return requireAuthApi(req, res, next);
-});
 
 const upload = multer({
   storage: multer.memoryStorage(),

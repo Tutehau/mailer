@@ -6,17 +6,10 @@
  * dynamiques (identifiants, historique, modèles) qui doivent toujours
  * venir du réseau.
  */
-const CACHE_VERSION = 'mailer-cache-v1';
+const CACHE_VERSION = 'mailer-cache-v2';
 
-// index.html n'est pas précaché : il passe par une redirection
-// d'authentification côté serveur, et le mettre en cache risquerait de
-// figer une page de connexion obsolète à la place du contenu réel.
 const CORE_ASSETS = [
-  'login.html',
-  'login.js',
-  'register.html',
-  'register.js',
-  'auth.css',
+  'index.html',
   'style.css',
   'app.js',
   'cookie-consent.js',
@@ -61,7 +54,7 @@ self.addEventListener('fetch', (event) => {
       .catch(() =>
         caches.match(request).then((cached) => {
           if (cached) return cached;
-          if (request.mode === 'navigate') return caches.match('login.html');
+          if (request.mode === 'navigate') return caches.match('index.html');
           return Response.error();
         })
       )

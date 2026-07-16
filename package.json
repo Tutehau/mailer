@@ -12,17 +12,14 @@
     "dev": "NODE_ENV=development node server.js"
   },
   "dependencies": {
-    "bcryptjs": "^3.0.3",
     "compression": "^1.8.1",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "express-rate-limit": "^8.5.2",
-    "express-session": "^1.19.0",
     "helmet": "^8.3.0",
     "morgan": "^1.11.0",
     "multer": "^2.2.0",
     "nodemailer": "^9.0.3",
-    "session-file-store": "^1.5.0",
     "sharp": "^0.35.3"
   }
 }
